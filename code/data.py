@@ -1,12 +1,24 @@
 import numpy as np
+from collections import defaultdict
+from eval import eval
 
+def get_word_counts(filename):
+    word_counts = defaultdict(int)
+    with open(filename, 'rt') as f:
+        for line in f:
+            line = line.strip()
+            # If there's nothing in the line, then we're done with the exercise. Print if needed, otherwise continue\n",
+            if len(line) == 0:
+                continue
+            # If the line starts with #, then we're beginning a new exercise\n",
+            elif line[0] == '#':
+                continue
+            else:
+                line = line.split()
+                word_counts[line[1].lower()] += 1
+    return word_counts
 
-# Todo: split data into sequences where each sequence is all of a user's exercises
-# Todo: Format instances into one-hot vectors containing instance data and label
-# (vector length will be two times number of distinct exercises)
-# Todo: Make data less sparse (less distinct exercises)
-
-def load_data(filename):
+def load_data(filename, word_counts):
     """
     This method loads and returns the data in filename. If the data is labelled training data, it returns labels too.
 
@@ -32,6 +44,27 @@ def load_data(filename):
     num_exercises = 0
     print('Loading instances...')
 
+    def word_len(word):
+        n = len(word)
+        if n < 4: return 'short'
+        if n < 7: return 'medium'
+        if n < 10: return 'med_long'
+        else: return 'long'
+    # Compute word counts
+
+    max_word_count = np.max(list(word_counts.values()))
+    freqs = defaultdict(int)
+
+    def word_freq(token):
+        frequency = word_counts[token.lower()] / max_word_count
+        if frequency < .001: freqs['<.001'] += 1; return 'very_rare'
+        if frequency < .005: freqs['<.005'] += 1; return 'rare'
+        if frequency < .01: freqs['<.01'] += 1; return 'medium_rare'
+        if frequency < .05: freqs['<.05'] += 1; return 'semi_rare'
+        if frequency < .1: freqs['<.1'] += 1;return 'quite_common'
+        if frequency < .5: freqs['<.5'] += 1; return 'common'
+        else: freqs['>=.5'] += 1; return 'very_common'
+
     with open(filename, 'rt') as f:
         for line in f:
             line = line.strip()
@@ -54,7 +87,7 @@ def load_data(filename):
                         value = float(value)
                     elif key == 'time':
                         if value == 'null':
-                            value = None
+                            value = 0#None
                         else:
                             assert '.' not in value
                             value = int(value)
@@ -72,6 +105,8 @@ def load_data(filename):
                 instance_properties['instance_id'] = line[0]
 
                 instance_properties['token'] = line[1]
+                instance_properties['frequency'] = word_freq(line[1])
+                instance_properties['length'] = word_len(line[1])
                 instance_properties['part_of_speech'] = line[2]
 
                 instance_properties['morphological_features'] = dict()
@@ -86,14 +121,13 @@ def load_data(filename):
                 if training:
                     label = float(line[6])
                     labels[instance_properties['instance_id']] = label
-                    instance_properties['label'] = label
-                else:
-                    instance_properties['label'] = .0
+
+                instance_properties['word_counts'] = word_counts
                 data.append(InstanceData(instance_properties=instance_properties))
 
         print('Done loading ' + str(len(data)) + ' instances across ' + str(num_exercises) +
               ' exercises.\n')
-
+    print(freqs)
     if training:
         return data, labels
     else:
@@ -110,6 +144,8 @@ class InstanceData(object):
         # Parameters specific to this instance
         self.instance_id = instance_properties['instance_id']
         self.token = instance_properties['token']
+        self.length = instance_properties['length']
+        self.frequency = instance_properties['frequency']
         self.part_of_speech = instance_properties['part_of_speech']
         self.morphological_features = instance_properties['morphological_features']
         self.dependency_label = instance_properties['dependency_label']
@@ -134,9 +170,7 @@ class InstanceData(object):
         # Derived parameters shared across the whole session
         self.session_id = self.instance_id[:8]
 
-        # Added label for DKT
-        self.label = instance_properties['label']
-
+        self.word_counts = instance_properties['word_counts']
     def to_features(self):
         """
         Prepares those features that we wish to use in the LogisticRegression example in this file. We introduce a bias,
@@ -149,16 +183,20 @@ class InstanceData(object):
         """
         to_return = dict()
 
-        # to_return['bias'] = 1.0
+        to_return['bias'] = 1.0
         to_return['user:' + self.user] = 1.0
         to_return['format:' + self.format] = 1.0
         to_return['token:' + self.token.lower()] = 1.0
+        to_return['frequency:' + self.frequency] = 1.0
+        to_return['frequency'] = self.word_counts[self.token.lower()] / 55197 # normalize by max word count
+        to_return['length:' + self.length] = 1.0
+        to_return['length'] = len(self.token) / 15 # normalize by max word length
+        to_return['time'] = np.abs(self.time) / 30
         to_return['session' + self.session] = 1.0
         to_return['part_of_speech:' + self.part_of_speech] = 1.0
         for morphological_feature in self.morphological_features:
             to_return['morphological_feature:' + morphological_feature] = 1.0
         to_return['dependency_label:' + self.dependency_label] = 1.0
-        # to_return['label:' + str(self.dependency_label)] = 1.0
 
         return to_return
 
@@ -190,37 +228,31 @@ def init_feature_map(data, feature_dict, max_users=float('inf')):
     print('Total features:', len(feature_dict))
 
 
-def vectorize_features(data, feature_map, training_labels=None):
+def vectorize_features(data, onehot_feature_map, training_labels=None):
     """
     Transforms one hot data in dicts to vectors according to given map,
     users are restricted according to the map.
     If there are labels for the data, it is filtered according to the users in the map.
     :param data:
-    :param feature_map:
+    :param onehot_feature_map:
     :param training_labels:
     :return:
     """
-
-    def to_one_hot(n, i):
-        ar = np.zeros(n)
-        ar[i] = 1
-        return ar
-
     formatted_instances = []
     labels = []
     included_instances = 0
-    n = len(feature_map)
+    n = len(onehot_feature_map)
     for instance_i, instance_data in enumerate(data):
         categorical_vec = np.zeros(n)
         excluded_user = False
         for key in instance_data.to_features().keys():
-            if key not in feature_map:
+            if key not in onehot_feature_map:
                 excluded_user = True
                 break
-            categorical_vec[feature_map[key]] = 1
+            categorical_vec[onehot_feature_map[key]] = 1
 
-        if (instance_i + 1) % 100000 == 0: print(round((instance_i + 1) / len(data), 3) * 100,
-                                                 '% of instances processed')
+        if (instance_i + 1) % 100000 == 0: print('\r', round((instance_i + 1) / len(data), 3) * 100,
+                                                 '% of instances processed', end='')
         if not excluded_user:
             formatted_instances.append(categorical_vec)
             if training_labels: labels.append(training_labels[instance_data.instance_id])
@@ -230,5 +262,11 @@ def vectorize_features(data, feature_map, training_labels=None):
     print(included_instances, 'instances included,', len(data) - included_instances, 'excluded')
     if training_labels: return np.matrix(formatted_instances), np.array(labels)
     return np.matrix(formatted_instances)
-    # if training_labels: return np.matrix(formatted_instances), np.array(labels)[1:]
-    # return np.matrix(formatted_instances)[:len(formatted_instances) - 1]
+
+
+def evaluate_predictions(pred_filename, predictions):
+    with open(pred_filename, 'wt') as f:
+        for instance_id, prediction in predictions.items():
+            f.write(instance_id + ' ' + str(prediction) + '\n')
+
+    eval(pred_filename, '../data_fr_en/fr_en.slam.20171218.dev.key')

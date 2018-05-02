@@ -19,7 +19,7 @@ code does not depend on any other Python libraries besides future.
 import argparse
 from io import open
 import os
-from data import InstanceData, load_data, vectorize_features, init_feature_map
+from data import *
 import nn
 import rnn
 from eval import eval
@@ -35,9 +35,7 @@ def main():
 
     parser = argparse.ArgumentParser(description='Duolingo shared task baseline model')
     parser.add_argument('--train', help='Training file name', default='../data_fr_en/fr_en.slam.20171218.train')
-    parser.add_argument('--test', help='Test file name, to make predictions on',
-                        default='../data_fr_en/fr_en.slam.20171218.dev')
-    parser.add_argument('--pred', help='Output file name for predictions, defaults to rnn_predictions_{n_users}.pred')
+    parser.add_argument('--test', help='Test file name, to make predictions on', default='../data_fr_en/fr_en.slam.20171218.dev')
     args = parser.parse_args()
 
     assert os.path.isfile(args.train)
@@ -46,13 +44,12 @@ def main():
     # Assert that the train course matches the test course
     assert os.path.basename(args.train)[:5] == os.path.basename(args.test)[:5]
 
-    training_data, training_labels = load_data(args.train)
-    test_data = load_data(args.test)
+    word_counts = get_word_counts(args.train)
+    training_data, training_labels = load_data(args.train, word_counts)
 
-    users = 1
+    test_data = load_data(args.test, word_counts)
 
-    if not args.pred:
-        args.pred = 'rnn_predictions_' + str(users) + '.pred'
+    users = 2000
 
     print('Using data for', users, 'users.')
     # create binary vectors of one hotted features
@@ -61,31 +58,17 @@ def main():
     init_feature_map(training_data, feature_map, users)
     init_feature_map(test_data, feature_map, 0)
     print('One hot map initialized')
+
     print('Formatting train data...')
-    X, Y = vectorize_features(training_data, feature_map, training_labels)
+    X_train, Y_train = vectorize_features(training_data, feature_map, training_labels)
+
     print('Formatting test data...')
-    X_t = vectorize_features(test_data, feature_map)
-    # n = len(X)
-    # n_train = int(0.8*n)
-    # X_train = X[:n_train]
-    # Y_train = Y[:n_train]
-    # X_test = X[n_train:]
-    # Y_test = Y[n_train:]
+    X_test = vectorize_features(test_data, feature_map)
+
     print('Collecting test labels...')
     names_test = [instance_data.instance_id for instance_data in test_data]
 
-    # predictions = nn.work_the_magic(X_train, Y_train,
-    #                                  X_test, Y_test, names_test)
-    predictions = rnn.work_the_magic(X, Y, X_t, [], names_test)
-
-    print('Printing predictions...')
-    with open(args.pred, 'wt') as f:
-        for instance_id, prediction in predictions.items():
-            f.write(instance_id + ' ' + str(prediction) + '\n')
-    print('Printing finished')
-
-    eval('../data_fr_en/fr_en.slam.20171218.dev.key', args.pred)
-
+    rnn.work_the_magic(X_train, Y_train, X_test, [], names_test)
 
 if __name__ == '__main__':
     main()

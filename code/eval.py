@@ -6,7 +6,7 @@ import math
 import os
 
 
-def eval(key_file, pred_file):
+def eval(pred_file, key_file):
     """
     Evaluates your predictions. This loads the dev labels and your predictions, and then evaluates them, printing the
     results for a variety of metrics to the screen.
@@ -26,8 +26,11 @@ def eval(key_file, pred_file):
     missing_instances = 0
     for instance_id in labels.keys():
         try:
-            predicted.append(predictions[instance_id])
-            actual.append(labels[instance_id])
+            if instance_id in predictions: 
+                predicted.append(predictions[instance_id])
+                actual.append(labels[instance_id])
+            else:
+                missing_instances+=1
         except KeyError:
             missing_instances += 1
     print('number of instances:', len(actual))
@@ -125,6 +128,7 @@ def compute_auroc(actual, predicted):
     num_positive = len([0 for x in sorted_actual if x == 1])
     num_negative = num - num_positive
     sum_positive = sum([r[i] for i in range(len(r)) if sorted_actual[i] == 1])
+    if num_negative * num_positive == 0: return 0 
     auroc = ((sum_positive - num_positive * (num_positive + 1) / 2.0) / (num_negative * num_positive))
 
     return auroc
