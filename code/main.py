@@ -49,7 +49,7 @@ def main():
 
     test_data = load_data(args.test, word_counts)
 
-    users = 2000
+    users = 1300
 
     print('Using data for', users, 'users.')
     # create binary vectors of one hotted features

@@ -66,6 +66,9 @@ def load_data(filename, word_counts):
         else: freqs['>=.5'] += 1; return 'very_common'
 
     with open(filename, 'rt') as f:
+        prev_pos = ''
+        prev_token = ''
+        prev_morphs = dict()
         for line in f:
             line = line.strip()
 
@@ -77,6 +80,9 @@ def load_data(filename, word_counts):
 
             # If the line starts with #, then we're beginning a new exercise
             elif line[0] == '#':
+                prev_pos = ''
+                prev_token = ''
+                prev_morphs = dict()
                 list_of_exercise_parameters = line[2:].split()
                 instance_properties = dict()
                 for exercise_parameter in list_of_exercise_parameters:
@@ -108,14 +114,18 @@ def load_data(filename, word_counts):
                 instance_properties['frequency'] = word_freq(line[1])
                 instance_properties['length'] = word_len(line[1])
                 instance_properties['part_of_speech'] = line[2]
-
+                instance_properties['prev_pos'] = prev_pos
+                instance_properties['prev_token'] = prev_token
+                prev_pos = line[2]
+                prev_token = line[1]
                 instance_properties['morphological_features'] = dict()
                 for l in line[3].split('|'):
                     [key, value] = l.split('=')
                     if key == 'Person':
                         value = int(value)
                     instance_properties['morphological_features'][key] = value
-
+                instance_properties['prev_morphs'] = prev_morphs
+                prev_morphs = instance_properties['morphological_features']
                 instance_properties['dependency_label'] = line[4]
                 instance_properties['dependency_edge_head'] = int(line[5])
                 if training:
@@ -144,10 +154,13 @@ class InstanceData(object):
         # Parameters specific to this instance
         self.instance_id = instance_properties['instance_id']
         self.token = instance_properties['token']
+        self.prev_token = instance_properties['prev_token']
         self.length = instance_properties['length']
         self.frequency = instance_properties['frequency']
         self.part_of_speech = instance_properties['part_of_speech']
+        self.prev_pos = instance_properties['prev_pos']
         self.morphological_features = instance_properties['morphological_features']
+        self.prev_morphs = instance_properties['prev_morphs']
         self.dependency_label = instance_properties['dependency_label']
         self.dependency_edge_head = instance_properties['dependency_edge_head']
 
@@ -187,6 +200,7 @@ class InstanceData(object):
         to_return['user:' + self.user] = 1.0
         to_return['format:' + self.format] = 1.0
         to_return['token:' + self.token.lower()] = 1.0
+        to_return['prev_token:' + self.prev_token.lower()] = 1.0
         to_return['frequency:' + self.frequency] = 1.0
         to_return['frequency'] = self.word_counts[self.token.lower()] / 55197 # normalize by max word count
         to_return['length:' + self.length] = 1.0
@@ -194,8 +208,11 @@ class InstanceData(object):
         to_return['time'] = np.abs(self.time) / 30
         to_return['session' + self.session] = 1.0
         to_return['part_of_speech:' + self.part_of_speech] = 1.0
+        to_return['prev_pos:' + self.prev_pos] = 1.0
         for morphological_feature in self.morphological_features:
             to_return['morphological_feature:' + morphological_feature] = 1.0
+        for morph in self.prev_morphs:
+            to_return['prev_morph:' + morph] = 1.0
         to_return['dependency_label:' + self.dependency_label] = 1.0
 
         return to_return
