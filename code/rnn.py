@@ -1,6 +1,6 @@
 from keras.models import Sequential
 from keras.models import load_model
-from keras.layers import Dense, Activation, TimeDistributed, LSTM, Conv1D, MaxPooling1D, Dropout, Masking
+from keras.layers import Dense, Activation, TimeDistributed, LSTM, Bidirectional, Dropout, Masking
 from keras import optimizers
 from time import time
 import numpy as np
@@ -37,7 +37,7 @@ def predict_test_set(instance_names, predictions):
     return {instance_name: prediction for instance_name, prediction in zip(instance_names, predictions)}
 
 
-def work_the_magic(X_train, Y_train, X_test, Y_test, names_test, sequence_size=8000):
+def work_the_magic(X_train, Y_train, X_test, Y_test, names_test, sequence_size=8000, layer_size=400):
     """
     Simple keras lstm
     """
@@ -47,17 +47,16 @@ def work_the_magic(X_train, Y_train, X_test, Y_test, names_test, sequence_size=8
     Y = split_to_sequences(np.expand_dims(Y_train, 2), time_window, batch_size, len(X) * time_window - len(X_train))
     # X = np.reshape(X_train, (-1, time_window, X_train.shape[1]))# for state resetting model
     # Y = np.reshape(np.expand_dims(Y_train, 2), (-1, time_window, 1))# for state resetting model
-
+    
+    print('layer size', layer_size)
     model = Sequential([
         Masking(mask_value=-1, batch_input_shape=(batch_size, time_window, X_train.shape[-1])),
-        LSTM(350, return_sequences=True, stateful=True),
-        LSTM(350, return_sequences=True, stateful=True),
-        LSTM(350, return_sequences=True, stateful=True),
+        Bidirectional(LSTM(layer_size, return_sequences=True, stateful=True, dropout=.1)),
         TimeDistributed(Dense(1, activation='sigmoid')),
     ])
     model.compile(loss='binary_crossentropy', optimizer='adagrad', metrics=['accuracy'])
 
-    # model.fit(X, Y, epochs=30, batch_size=batch_size)
+    # model.fit(X, Y, epochs=20, batch_size=batch_size)
 
     def evaluate_model():
         X_t = split_to_sequences(X_test, time_window, batch_size)
@@ -70,7 +69,7 @@ def work_the_magic(X_train, Y_train, X_test, Y_test, names_test, sequence_size=8
 
 
     class EvalCallback(Callback):
-        def __init__(self, interval=3):
+        def __init__(self, interval=2):
             super(Callback, self).__init__()
             self.interval = interval
 
