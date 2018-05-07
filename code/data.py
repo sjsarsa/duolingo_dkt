@@ -281,9 +281,9 @@ def vectorize_features(data, onehot_feature_map, training_labels=None):
     return np.matrix(formatted_instances)
 
 
-def evaluate_predictions(pred_filename, predictions):
+def evaluate_predictions(pred_filename, predictions, key_file):
     with open(pred_filename, 'wt') as f:
         for instance_id, prediction in predictions.items():
             f.write(instance_id + ' ' + str(prediction) + '\n')
 
-    eval(pred_filename, '../data_fr_en/fr_en.slam.20171218.dev.key')
+    eval(pred_filename, key_file)

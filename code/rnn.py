@@ -37,7 +37,7 @@ def predict_test_set(instance_names, predictions):
     return {instance_name: prediction for instance_name, prediction in zip(instance_names, predictions)}
 
 
-def work_the_magic(X_train, Y_train, X_test, Y_test, names_test, sequence_size=8000, layer_size=400):
+def work_the_magic(X_train, Y_train, X_test, Y_test, names_test, keyfile, layer_size=400, sequence_size=800):
     """
     Simple keras lstm
     """
@@ -64,8 +64,8 @@ def work_the_magic(X_train, Y_train, X_test, Y_test, names_test, sequence_size=8
         predictions = np.reshape(preds, preds.shape[0] * preds.shape[1])
         print('Test predictions')
         evaluate_predictions('tmp_pred.pred',
-                             predict_test_set(names_test, predictions))
-
+                             predict_test_set(names_test, predictions),
+                             keyfile)
 
 
     class EvalCallback(Callback):

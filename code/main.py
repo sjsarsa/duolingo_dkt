@@ -23,7 +23,7 @@ from data import *
 import nn
 import rnn
 from eval import eval
-
+from logistic_regression import logistic_regression
 
 def main():
     """
@@ -34,9 +34,19 @@ def main():
     """
 
     parser = argparse.ArgumentParser(description='Duolingo shared task baseline model')
-    parser.add_argument('--train', help='Training file name', default='../data_fr_en/fr_en.slam.20171218.train')
-    parser.add_argument('--test', help='Test file name, to make predictions on', default='../data_fr_en/fr_en.slam.20171218.dev')
+    parser.add_argument('--train', help='Training file name')
+    parser.add_argument('--test', help='Test file name, to make predictions on')
+    parser.add_argument('--key', help='Key file name, contains test labels')
+    parser.add_argument('--pred', help='Output file name for predictions, defaults to test_name.pred')
     args = parser.parse_args()
+
+    folder = '../'
+    lang = 'fr_en'
+    print(folder + 'data_' + lang + '/' + lang + '.slam.20171218.train')
+    if not args.train: args.train = folder + 'data_' + lang + '/' + lang + '.slam.20171218.train'
+    if not args.test: args.test = folder + 'data_' + lang + '/' + lang + '.slam.20171218.dev'
+    if not args.key: args.key = folder + 'data_' + lang + '/' + lang + '.slam.20171218.dev.key'
+    if not args.pred: args.pred = args.test + '.pred'
 
     assert os.path.isfile(args.train)
     assert os.path.isfile(args.test)
@@ -49,7 +59,7 @@ def main():
 
     test_data = load_data(args.test, word_counts)
 
-    users = 1300
+    users = 9999
 
     print('Using data for', users, 'users.')
     # create binary vectors of one hotted features
@@ -68,7 +78,10 @@ def main():
     print('Collecting test labels...')
     names_test = [instance_data.instance_id for instance_data in test_data]
 
-    rnn.work_the_magic(X_train, Y_train, X_test, [], names_test)
+    rnn.work_the_magic(X_train, Y_train, X_test, [], names_test, args.key)
+
+    #predictions = logistic_regression(training_data, training_labels, test_data)
+    #evaluate_predictions('args.pred', predictions, args.key)
 
 if __name__ == '__main__':
     main()
